@@ -1,0 +1,60 @@
+#!/bin/bash
+
+set -e -u
+
+exec 3>&1 # make stdout available as fd 3 for the result
+exec 1>&2 # redirect all output to stderr for logging
+
+validate_url() {
+  if [[ $(wget -S --spider $1  2>&1 | grep 'HTTP/1.1 200 OK') ]]; then echo "true"; fi
+}
+
+TMPDIR=${TMPDIR:-/tmp}
+payload="$(mktemp "${TMPDIR}/git-release-tags.XXXXXX")"
+cat > "${payload}" <&0
+
+destination=$1
+if [ -z "${destination}" ]
+then
+  echo "usage: $0 </path/to/destination>" >&2
+  exit 1
+fi
+
+# Defaults
+results_per_page=100
+semver_enabled=true
+final_only=true
+semver_dev_format=1
+
+# From payload
+api_token=$( jq -r '.source.token // ""' < ${payload})
+#if [ -z "$api_token" ]; then api_token_header=""; else api_token_header=$(echo --header \"Authorization: token $api_token\"); fi
+if [ -z "$api_token" ]; then api_token_header=""; else api_token_header="access_token=$api_token&"; fi
+github_repo=$( jq -r '.source.repo // ""' < ${payload})
+github_owner=$( jq -r '.source.owner // ""' < ${payload})
+github_api_per_page=$( jq -r '.source.per_page // ""' < ${payload})
+if [ -z "$github_api_per_page" ]; then github_api_per_page=$results_per_page; fi
+release_semver=$( jq -r '.source.semver // ""' < ${payload})
+if [ $release_semver ]; then release_semver=$semver_enabled; fi
+release_final_only=$( jq -r '.source.final_only // ""' < ${payload})
+if [ $release_final_only ]; then release_final_only=$final_only; fi
+release_name=$( jq -r '.source.tag_prefix // ""' < ${payload})
+release_version_family=$( jq -r '.source.version_family // ""' < ${payload})
+if [ -z "$release_version_family" ]; then release_version_family=""; fi
+release_version=$( jq -r '.version.version // ""' < ${payload})
+if [ -z "$release_version" ]; then release_version="latest"; fi
+version="$(jq -r '.version // ""' < "${payload}")"
+
+release_file=$release_name$release_version
+file_url=https://github.com/${github_owner}/${github_repo}/archive/${release_file}.tar.gz
+if [ $(validate_url $file_url) ]
+then
+  mkdir -p "${destination}"
+  wget -O "${destination}/source.tar.gz" "${file_url}"
+  echo "${release_version}" > "${destination}/version"
+  echo "${file_url}" > "${destination}/url"
+fi
+
+jq -n "{
+  version: ${version}
+}" >&3
