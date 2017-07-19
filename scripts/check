@@ -31,13 +31,8 @@ exec 1>&2 # redirect all output to stderr for logging
 #     }
 #   }
 
-
-reverse() {
-  tac <(echo "$@" | tr ' ' '\n') | tr '\n' ' '
-}
-
-TMPDIR=${TMPDIR:-/tmp}
-payload="$(mktemp "${TMPDIR}/git-release-tags.XXXXXX")"
+tmpdir=${tmpdir:-/tmp}
+payload="$(mktemp "${tmpdir}/git-release-tags.XXXXXX")"
 cat > "${payload}" <&0
 
 # Defaults
@@ -62,37 +57,26 @@ release_version=$( jq -r '.version.version // ""' < ${payload})
 if [ -z "$release_version" ]; then release_version="latest"; fi
 
 # Define semver regex formats
+semver_regex_escaped='[\\.]?([0-9]+\\.)?([0-9]+\\.)?([0-9]+)?$'
 case $semver_dev_format in
   1)
     # Examples: 1.1.1rc1, 1.2.4RC1
-    regex_format='[\.]?([0-9]+\.)?([0-9]+\.)?([0-9]+)?([a-zA-Z0-9]+[0-9]+)?$'
-    regex_format_escaped='[\\.]?([0-9]+\\.)?([0-9]+\\.)?([0-9]+)?([a-zA-Z0-9]+[0-9]+)?$'
+    semver_regex_escaped='[\\.]?([0-9]+\\.)?([0-9]+\\.)?([0-9]+)?([a-zA-Z0-9]+[0-9]+)?$'
     ;;
   2)
     #Examples: 1.1.1-rc.1, 1.2.4-RC.4
-    regex_format='.([0-9]+\.)?([0-9]+\.)?([0-9]+)?([-+][a-z0-9]+\.[0-9]+)?$'
-    regex_format_escaped='.([0-9]+\\.)?([0-9]+\\.)?([0-9]+)?([-+][a-z0-9]+\\.[0-9]+)?$'
+    semver_regex_escaped='.([0-9]+\\.)?([0-9]+\\.)?([0-9]+)?([-+][a-z0-9]+\\.[0-9]+)?$'
     ;;
 esac
 
-if [[ $release_final_only ]]
-then
-  release_test=${release_name}${release_version_family}'[\\.]?([0-9]+\\.)?([0-9]+\\.)?([0-9]+)?$'
-else
-  release_test=${release_name}${release_version_family}${regex_format_escaped}
-fi
+# Prepare the matching terms for jq
+release_test=${release_name}${release_version_family}${semver_regex_escaped}
 
 # Pass it all through a curl request to github api using the release_test variable to make sure we are returning what we need
 github_api_releases=$(curl -s https://api.github.com/repos/${github_owner}/${github_repo}/tags?${api_token_header}per_page=${github_api_per_page} | jq --raw-output '.[].name | select( test("'${release_test}'"))')
 
 # Loop through the results, but break after we return the first one
-if [ "$release_version" == "latest" ]
-then
-  loop_data=$github_api_releases
-else
-#  loop_data=$github_api_releases
-  loop_data=$(reverse $github_api_releases)
-fi
+loop_data=$github_api_releases
 
 new_versions_file="${payload}-new-versions"
 touch "${new_versions_file}"
@@ -129,6 +113,16 @@ fi
 
 mapfile -t versions_sorted < "${new_versions_file}"
 
+for ((i=0; i <= $((${#versions_sorted[@]} - 2)); ++i)); do
+  for ((j=((i + 1)); j <= ((${#versions_sorted[@]} - 1)); ++j)); do
+    if [[ $(semver compare "${versions_sorted[i]}" "${versions_sorted[j]}") -eq 1 ]]; then
+      tmp=${versions_sorted[i]}
+      versions_sorted[i]=${versions_sorted[j]}
+      versions_sorted[j]=$tmp
+    fi
+  done
+done
+
 versions_json=''
 
 for ((i=0; i < $((${#versions_sorted[@]})); ++i))
@@ -139,4 +133,4 @@ done
 versions_json="${versions_json#','}"
 versions_json="[${versions_json}]"
 
-jq -n "$versions_json" >&3
+jq -n "${versions_json}" >&3
