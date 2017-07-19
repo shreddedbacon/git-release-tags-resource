@@ -52,6 +52,7 @@ if [ -z "$release_version_family" ]; then release_version_family=""; fi
 release_version=$( jq -r '.version.version // ""' < ${payload})
 # If we aren't passing in a version number to the check from fly check-resource or such, then we want the latest version always
 if [ -z "$release_version" ]; then release_version="latest"; fi
+version="$(jq -r '.version // ""' < "${payload}")"
 
 release_file=$release_name$release_version
 file_url=https://github.com/${github_owner}/${github_repo}/archive/${release_file}.tar.gz
