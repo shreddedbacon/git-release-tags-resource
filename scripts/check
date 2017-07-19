@@ -2,8 +2,12 @@
 
 set -e -u
 
-exec 3>&1 # make stdout available as fd 3 for the result
-exec 1>&2 # redirect all output to stderr for logging
+local_testing=false
+if [ "$local_testing" == "false" ]
+then
+  exec 3>&1 # make stdout available as fd 3 for the result
+  exec 1>&2 # redirect all output to stderr for logging
+fi
 
 #  _____ _____ _____  ______ _____ _      _____  ___   _____ _____   _____ ___  _____  _____
 # |  __ \_   _|_   _| | ___ \  ___| |    |  ___|/ _ \ /  ___|  ___| |_   _/ _ \|  __ \/  ___|
@@ -12,11 +16,11 @@ exec 1>&2 # redirect all output to stderr for logging
 # | |_\ \_| |_  | |   | |\ \| |___| |____| |___| | | |/\__/ / |___    | || | | | |_\ \/\__/ /
 #  \____/\___/  \_/   \_| \_\____/\_____/\____/\_| |_/\____/\____/    \_/\_| |_/\____/\____/
 #
-# This will check the github repository using the github api to collect tags that match semver regex
-# As long as the tags you are looking to monitor match the following format
-# example:
-#   release-1.2.3
-# The structure of the json payload needs to be
+# This will check the github repository using the github api to collect tags that match semver regex.
+# This is useful for repositories that aren't using actual github releases, and using tags instead (ie, nginx/nginx)
+# As long as the release tags follow a consitent naming pattern
+#
+# The structure of the json is
 #   {
 #     "source": {
 #        "repo": "nginx",
@@ -35,34 +39,44 @@ exec 1>&2 # redirect all output to stderr for logging
 
 tmpdir=${tmpdir:-/tmp}
 payload="$(mktemp "${tmpdir}/git-release-tags.XXXXXX")"
-cat > "${payload}" <&0
+if [ "$local_testing" == "false" ]
+then
+  cat > "${payload}" <&0
+else
+  cat payload > "${payload}"
+fi
 
 # Defaults
-results_per_page=100
+results_per_page=20
 final_only=true
 semver_dev_format=1
 
 # From payload
 api_token=$( jq -r '.source.token // ""' < ${payload})
-#if [ -z "$api_token" ]; then api_token_header=""; else api_token_header=$(echo --header \"Authorization: token $api_token\"); fi
+# Use the access_token=? because the header value wasn't being passed in correctly, otherwise if not provided leave it out the token section from the requests
 if [ -z "$api_token" ]; then api_token_header=""; else api_token_header="access_token=$api_token&"; fi
 github_repo=$( jq -r '.source.repo // ""' < ${payload})
 github_owner=$( jq -r '.source.owner // ""' < ${payload})
 github_api_per_page=$( jq -r '.source.per_page // ""' < ${payload})
+# If we aren't passing in an override for the per page results, set it to the default
 if [ -z "$github_api_per_page" ]; then github_api_per_page=$results_per_page; fi
 release_final_only=$( jq -r '.source.final_only // ""' < ${payload})
+# If we aren't passing in an override for final releases, set it to the default
 if [ $release_final_only ]; then release_final_only=$final_only; fi
 release_name=$( jq -r '.source.tag_prefix // ""' < ${payload})
 release_version_family=$( jq -r '.source.version_family // ""' < ${payload})
+# If we aren't passing in a version_family, then just set it to empty
 if [ -z "$release_version_family" ]; then release_version_family=""; fi
 release_version=$( jq -r '.version.version // ""' < ${payload})
+# If we aren't passing in a version number to the check from fly check-resource or such, then we want the latest version always
 if [ -z "$release_version" ]; then release_version="latest"; fi
 
 # Define semver regex formats
-
+# If we only want final releases, then we set the regex here
 if [[ $release_final_only ]]
 then
   semver_regex_escaped='[\\.]?([0-9]+\\.)?([0-9]+\\.)?([0-9]+)?$'
+# Else if we want the dev formats then we set that regex here using case
 else
   case $semver_dev_format in
     1)
@@ -71,7 +85,7 @@ else
       ;;
     2)
       #Examples: 1.1.1-rc.1, 1.2.4-RC.4
-      semver_regex_escaped='.([0-9]+\\.)?([0-9]+\\.)?([0-9]+)?([-+][a-z0-9]+\\.[0-9]+)?$'
+      semver_regex_escaped='[\\.]?([0-9]+\\.)?([0-9]+\\.)?([0-9]+)?([-+][a-z0-9]+\\.[0-9]+)?$'
       ;;
   esac
 fi
@@ -82,59 +96,21 @@ release_test=${release_name}${release_version_family}${semver_regex_escaped}
 # Pass it all through a curl request to github api using the release_test variable to make sure we are returning what we need
 github_api_releases=$(curl -s https://api.github.com/repos/${github_owner}/${github_repo}/tags?${api_token_header}per_page=${github_api_per_page} | jq --raw-output '.[].name | select( test("'${release_test}'"))')
 
-# Loop through the results, but break after we return the first one
-loop_data=$github_api_releases
-
+# Create a file to dump the results
 new_versions_file="${payload}-new-versions"
 touch "${new_versions_file}"
 
-###out_to_file=false
-###for each in $(tac <(echo "$loop_data" | tr ' ' '\n') | tr '\n' ' ')
-###do
-###  if [[ "$each" == "$release_name$release_version" || "$release_version" == "latest" ]]
-###  then
-###    out_to_file=true
-###  fi
-###  if [[ "$out_to_file" == "true" ]]
-###  then
-###    echo "${each:${#release_name}}" >> "${new_versions_file}"
-###  fi
-###  if [ "$release_version" == "latest" ]
-###  then
-###    break
-###  fi
-###done
-#for each in $loop_data
-#do
-#  if [[ "$each" == "$release_name$release_version" || "$release_version" == "latest" ]]
-#  then
-#    start_echo=true
-#  fi
-#  if [ "$start_echo" == "true" ]
-#  then
-#    echo "${each:${#release_name}}" >> "${new_versions_file}"
-#  fi
-#  # We only want the first result, break here
-#  if [ "$release_version" == "latest" ]
-#  then
-#    break
-#  fi
-#done
-## If we get no matches from the check, output the latest version
-#if [ "$start_echo" == "false" ]
-#then
-#  loop_data=$github_api_releases
-#  release_version="latest"
-#  for each in $loop_data
-#  do
-#    echo "${each:${#release_name}}" >> "${new_versions_file}"
-#    # We only want the first result, break here
-#    break
-#  done
-#fi
+# Loop through the results of the curl
+for each in $github_api_releases
+do
+  # Write to the file
+  echo "${each:${#release_name}}" >> "${new_versions_file}"
+done
 
+# Read the file into mapfile
 mapfile -t versions_sorted < "${new_versions_file}"
 
+# Loop through the created map and sort them by semver comparison (can take some time if there are many results to loop through)
 for ((i=0; i <= $((${#versions_sorted[@]} - 2)); ++i)); do
   for ((j=((i + 1)); j <= ((${#versions_sorted[@]} - 1)); ++j)); do
     if [[ $(semver compare "${versions_sorted[i]}" "${versions_sorted[j]}") -eq 1 ]]; then
@@ -145,28 +121,38 @@ for ((i=0; i <= $((${#versions_sorted[@]} - 2)); ++i)); do
   done
 done
 
-
+# Create the empty json string
 versions_json=''
 
+# Check if we are looking for a specific version, or if we just want the latest version
 keep_it=false
-for ((i=0; i < $((${#versions_sorted[@]})); ++i))
-do
-  if [[ "${versions_sorted[i]}" == "$release_version" || "$release_version" == "latest" ]]
-  then
-    keep_it=true
-  fi
-  if [ "$keep_it" == "true" ]
-  then
-    versions_json="${versions_json},{\"version\":\"${versions_sorted[i]}\"}"
-  fi
-  if [ "$release_version" == "latest" ]
-  then
-    versions_json="${versions_json},{\"version\":\"${versions_sorted[$((${#versions_sorted[@]}))]}\"}"
-    break
-  fi
-done
+# If we want the latest, spit it out
+if [ "$release_version" == "latest" ]
+then
+  versions_json="${versions_json},{\"version\":\"${versions_sorted[$((${#versions_sorted[@]}-1))]}\"}"
+# Else loop through the list and display versions from requested version onwards
+else
+  for ((i=0; i < $((${#versions_sorted[@]})); ++i))
+  do
+    if [[ "${versions_sorted[i]}" == "$release_version" ]]
+    then
+      keep_it=true
+    fi
+    if [ "$keep_it" == "true" ]
+    then
+      versions_json="${versions_json},{\"version\":\"${versions_sorted[i]}\"}"
+    fi
+  done
+fi
 
+# Fix up the json for the result
 versions_json="${versions_json#','}"
 versions_json="[${versions_json}]"
 
-jq -n "${versions_json}" >&3
+# Spit out the result
+if [ "$local_testing" == "false" ]
+then
+  jq -n "${versions_json}" >&3
+else
+  jq -n "${versions_json}"
+fi
