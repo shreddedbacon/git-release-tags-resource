@@ -30,8 +30,6 @@ fi
 
 # Defaults
 results_per_page=20
-final_only=true
-semver_dev_format=1
 
 # From payload
 api_token=$( jq -r '.source.token // ""' < ${payload})
@@ -42,9 +40,6 @@ github_owner=$( jq -r '.source.owner // ""' < ${payload})
 github_api_per_page=$( jq -r '.source.per_page // ""' < ${payload})
 # If we aren't passing in an override for the per page results, set it to the default
 if [ -z "$github_api_per_page" ]; then github_api_per_page=$results_per_page; fi
-release_final_only=$( jq -r '.source.final_only // ""' < ${payload})
-# If we aren't passing in an override for final releases, set it to the default
-if [ $release_final_only ]; then release_final_only=$final_only; fi
 release_name=$( jq -r '.source.tag_prefix // ""' < ${payload})
 release_version_family=$( jq -r '.source.version_family // ""' < ${payload})
 # If we aren't passing in a version_family, then just set it to empty

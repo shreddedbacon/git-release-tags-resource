@@ -27,8 +27,6 @@ fi
 #        "owner": "nginx",
 #        "token": "<token>"
 #        "per_page": 100,
-#        "final_only": true,
-#        "semver_dev_format": 1,
 #        "tag_prefix": "release-"
 #     },
 #     "version": {
@@ -48,8 +46,6 @@ fi
 
 # Defaults
 results_per_page=20
-final_only=true
-semver_dev_format=1
 
 # From payload
 api_token=$( jq -r '.source.token // ""' < ${payload})
@@ -60,9 +56,6 @@ github_owner=$( jq -r '.source.owner // ""' < ${payload})
 github_api_per_page=$( jq -r '.source.per_page // ""' < ${payload})
 # If we aren't passing in an override for the per page results, set it to the default
 if [ -z "$github_api_per_page" ]; then github_api_per_page=$results_per_page; fi
-release_final_only=$( jq -r '.source.final_only // ""' < ${payload})
-# If we aren't passing in an override for final releases, set it to the default
-if [ $release_final_only ]; then release_final_only=$final_only; fi
 release_name=$( jq -r '.source.tag_prefix // ""' < ${payload})
 release_version_family=$( jq -r '.source.version_family // ""' < ${payload})
 # If we aren't passing in a version_family, then just set it to empty
@@ -72,23 +65,8 @@ release_version=$( jq -r '.version.version // ""' < ${payload})
 if [ -z "$release_version" ]; then release_version="latest"; fi
 
 # Define semver regex formats
-# If we only want final releases, then we set the regex here
-if [[ $release_final_only ]]
-then
-  semver_regex_escaped='[\\.]?([0-9]+\\.)?([0-9]+\\.)?([0-9]+)?$'
-# Else if we want the dev formats then we set that regex here using case
-else
-  case $semver_dev_format in
-    1)
-      # Examples: 1.1.1rc1, 1.2.4RC1
-      semver_regex_escaped='[\\.]?([0-9]+\\.)?([0-9]+\\.)?([0-9]+)?([a-zA-Z0-9]+[0-9]+)?$'
-      ;;
-    2)
-      #Examples: 1.1.1-rc.1, 1.2.4-RC.4
-      semver_regex_escaped='[\\.]?([0-9]+\\.)?([0-9]+\\.)?([0-9]+)?([-+][a-z0-9]+\\.[0-9]+)?$'
-      ;;
-  esac
-fi
+# we only want final releases, no dev/pre-release unless there is an easy way to compare 1.1.1RC1 to 1.1.1ALPHA2 and 1.1.1BETA3 and which one comes first
+semver_regex_escaped='[\\.]?([0-9]+\\.)?([0-9]+\\.)?([0-9]+)?$'
 
 # Prepare the matching terms for jq
 release_test=${release_name}${release_version_family}${semver_regex_escaped}
