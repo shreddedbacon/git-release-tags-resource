@@ -31,6 +31,8 @@ exec 1>&2 # redirect all output to stderr for logging
 #     }
 #   }
 
+
+
 tmpdir=${tmpdir:-/tmp}
 payload="$(mktemp "${tmpdir}/git-release-tags.XXXXXX")"
 cat > "${payload}" <&0
@@ -86,35 +88,50 @@ loop_data=$github_api_releases
 new_versions_file="${payload}-new-versions"
 touch "${new_versions_file}"
 
-start_echo=false
-for each in $loop_data
+out_to_file=false
+for each in $(tac <(echo "$loop_data" | tr ' ' '\n') | tr '\n' ' ')
 do
   if [[ "$each" == "$release_name$release_version" || "$release_version" == "latest" ]]
   then
-    start_echo=true
+    out_to_file=true
   fi
-  if [ "$start_echo" == "true" ]
+  if [ "$out_to_file" == "true" || "$release_version" == "latest" ]]
   then
     echo "${each:${#release_name}}" >> "${new_versions_file}"
   fi
-  # We only want the first result, break here
   if [ "$release_version" == "latest" ]
   then
     break
   fi
 done
-# If we get no matches from the check, output the latest version
-if [ "$start_echo" == "false" ]
-then
-  loop_data=$github_api_releases
-  release_version="latest"
-  for each in $loop_data
-  do
-    echo "${each:${#release_name}}" >> "${new_versions_file}"
-    # We only want the first result, break here
-    break
-  done
-fi
+#for each in $loop_data
+#do
+#  if [[ "$each" == "$release_name$release_version" || "$release_version" == "latest" ]]
+#  then
+#    start_echo=true
+#  fi
+#  if [ "$start_echo" == "true" ]
+#  then
+#    echo "${each:${#release_name}}" >> "${new_versions_file}"
+#  fi
+#  # We only want the first result, break here
+#  if [ "$release_version" == "latest" ]
+#  then
+#    break
+#  fi
+#done
+## If we get no matches from the check, output the latest version
+#if [ "$start_echo" == "false" ]
+#then
+#  loop_data=$github_api_releases
+#  release_version="latest"
+#  for each in $loop_data
+#  do
+#    echo "${each:${#release_name}}" >> "${new_versions_file}"
+#    # We only want the first result, break here
+#    break
+#  done
+#fi
 
 mapfile -t versions_sorted < "${new_versions_file}"
 
