@@ -35,25 +35,16 @@ tmpdir=${tmpdir:-/tmp}
 payload="$(mktemp "${tmpdir}/git-release-tags.XXXXXX")"
 cat > "${payload}" <&0
 
-# Defaults
-results_per_page=20
-
 # From payload
 api_token=$( jq -r '.source.token // ""' < ${payload})
 # Use the access_token=? because the header value wasn't being passed in correctly, otherwise if not provided leave it out the token section from the requests
 if [ -z "$api_token" ]; then api_token_header=""; else api_token_header="access_token=$api_token&"; fi
 github_repo=$( jq -r '.source.repo // ""' < ${payload})
 github_owner=$( jq -r '.source.owner // ""' < ${payload})
-github_api_per_page=$( jq -r '.source.per_page // ""' < ${payload})
-# If we aren't passing in an override for the per page results, set it to the default
-if [ -z "$github_api_per_page" ]; then github_api_per_page=$results_per_page; fi
+github_api_per_page=$( jq -r '.source.per_page // "20"' < ${payload})
 release_name=$( jq -r '.source.tag_prefix // ""' < ${payload})
 release_version_family=$( jq -r '.source.version_family // ""' < ${payload})
-# If we aren't passing in a version_family, then just set it to empty
-if [ -z "$release_version_family" ]; then release_version_family=""; fi
-release_version=$( jq -r '.version.version // ""' < ${payload})
-# If we aren't passing in a version number to the check from fly check-resource or such, then we want the latest version always
-if [ -z "$release_version" ]; then release_version="latest"; fi
+release_version=$( jq -r '.version.version // "latest"' < ${payload})
 
 # Define semver regex formats
 # we only want final releases, no dev/pre-release unless there is an easy way to compare 1.1.1RC1 to 1.1.1ALPHA2 and 1.1.1BETA3 and which one comes first
