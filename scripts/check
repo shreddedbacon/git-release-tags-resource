@@ -2,12 +2,8 @@
 
 set -e -u
 
-local_testing=false
-if [ "$local_testing" == "false" ]
-then
-  exec 3>&1 # make stdout available as fd 3 for the result
-  exec 1>&2 # redirect all output to stderr for logging
-fi
+exec 3>&1 # make stdout available as fd 3 for the result
+exec 1>&2 # redirect all output to stderr for logging
 
 #  _____ _____ _____  ______ _____ _      _____  ___   _____ _____   _____ ___  _____  _____
 # |  __ \_   _|_   _| | ___ \  ___| |    |  ___|/ _ \ /  ___|  ___| |_   _/ _ \|  __ \/  ___|
@@ -37,12 +33,7 @@ fi
 
 tmpdir=${tmpdir:-/tmp}
 payload="$(mktemp "${tmpdir}/git-release-tags.XXXXXX")"
-if [ "$local_testing" == "false" ]
-then
-  cat > "${payload}" <&0
-else
-  cat payload > "${payload}"
-fi
+cat > "${payload}" <&0
 
 # Defaults
 results_per_page=20
@@ -128,9 +119,4 @@ versions_json="${versions_json#','}"
 versions_json="[${versions_json}]"
 
 # Spit out the result
-if [ "$local_testing" == "false" ]
-then
-  jq -n "${versions_json}" >&3
-else
-  jq -n "${versions_json}"
-fi
+jq -n "${versions_json}" >&3
