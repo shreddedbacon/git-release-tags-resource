@@ -38,7 +38,7 @@ resources:
 
 ### `check`: Check for release tags
 
-Checks if there are new versions of the source. You can query concourse for specific versions using `fly -t <target> check-resource -r <pipeline>/<resource_name> --from version:<version>`
+Checks if there are new versions of the source. You can query the resource for specific versions using `fly -t <target> check-resource -r <pipeline>/<resource_name> --from version:<version>`
 
 ### `in`: Download a version
 
