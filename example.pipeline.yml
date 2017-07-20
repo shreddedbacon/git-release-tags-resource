@@ -1,0 +1,37 @@
+jobs:
+- name: get-resource-files
+  plan:
+  - get: nginx-sourcecode
+    trigger: true
+  - task: get-resource-files
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source: { repository: alpine }
+      inputs:
+        - name: nginx-sourcecode
+      run:
+        path: sh
+        args:
+        - -exc
+        - |
+          ls -alR
+          tar tf nginx-sourcecode/source.tar.gz | head -n1
+
+resource_types:
+- name: git-release-tags
+  type: docker-image
+  source:
+    repository: shreddedbacon/git-release-tags
+
+resources:
+- name: nginx-sourcecode
+  type: git-release-tags
+  source:
+    repo: nginx
+    owner: nginx
+    final_only: true
+    tag_prefix: release-
+    per_page: 10
+
