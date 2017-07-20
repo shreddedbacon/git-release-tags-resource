@@ -18,6 +18,8 @@ jobs:
         - |
           ls -alR
           tar tf nginx-sourcecode/source.tar.gz | head -n1
+          cat nginx-sourcecode/url
+          cat nginx-sourcecode/version
 
 resource_types:
 - name: git-release-tags
