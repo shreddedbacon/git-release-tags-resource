@@ -55,8 +55,8 @@ release_test=${release_name}${release_version_family}${semver_regex_escaped}
 
 # Pass it all through a curl request to github api using the release_test variable to make sure we are returning what we need
 #github_api_releases=$(curl -s https://api.github.com/repos/${github_owner}/${github_repo}/tags?${api_token_header}per_page=${github_api_per_page} | jq --raw-output '.[].name | select( test("'${release_test}'"))')
-github_api_releases=$(curl -s https://api.github.com/repos/${github_owner}/${github_repo}/tags?${api_token_header}per_page=${github_api_per_page})
-github_api_releases=$(echo $github_api_releases | jq --raw-output '.[]."name" | select( test("'${release_test}'"))')
+github_api_releases=$(curl --max-time 900 --connect-timeout 300 -s https://api.github.com/repos/${github_owner}/${github_repo}/tags?${api_token_header}per_page=${github_api_per_page})
+github_api_releases=$(echo $github_api_releases | jq -r '.[].name | select( test("'${release_test}'"))')
 # Create a file to dump the results
 new_versions_file="${payload}-new-versions"
 touch "${new_versions_file}"
