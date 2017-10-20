@@ -42,6 +42,7 @@ if [ -z "$api_token" ]; then api_token_header=""; else api_token_header="access_
 github_repo=$( jq -r '.source.repo // ""' < ${payload})
 github_owner=$( jq -r '.source.owner // ""' < ${payload})
 github_api_per_page=$( jq -r '.source.per_page // "20"' < ${payload})
+release_ignore=$( jq -r '.source.tag_ignore // ""' < ${payload})
 release_name=$( jq -r '.source.tag_prefix // ""' < ${payload})
 release_version_family=$( jq -r '.source.version_family // ""' < ${payload})
 release_version=$( jq -r '.version.version // "latest"' < ${payload})
@@ -50,8 +51,13 @@ release_version=$( jq -r '.version.version // "latest"' < ${payload})
 # we only want final releases, no dev/pre-release unless there is an easy way to compare 1.1.1RC1 to 1.1.1ALPHA2 and 1.1.1BETA3 and which one comes first
 semver_regex_escaped='[\\.]?([0-9]+\\.)?([0-9]+\\.)?([0-9]+)?$'
 
+release_ignore_test=""
 # Prepare the matching terms for jq
-release_test=${release_name}${release_version_family}${semver_regex_escaped}
+if [ ! -z $release_ignore ]
+then
+  release_ignore_test="(^(?!.*${release_ignore}.*$).)"
+fi
+release_test=${release_ignore_test}${release_name}${release_version_family}${semver_regex_escaped}
 
 # Pass it all through a curl request to github api using the release_test variable to make sure we are returning what we need
 #github_api_releases=$(curl -s https://api.github.com/repos/${github_owner}/${github_repo}/tags?${api_token_header}per_page=${github_api_per_page} | jq --raw-output '.[].name | select( test("'${release_test}'"))')
