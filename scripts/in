@@ -14,7 +14,7 @@ exec 1>&2 # redirect all output to stderr for logging
 #
 
 validate_url() {
-  if [[ $(wget -S --spider $1  2>&1 | egrep 'HTTP/1.1 200 OK|HTTP/1.1 302') ]]; then echo "true"; fi
+  if [[ $(wget -S --spider $1  2>&1 | grep 'HTTP/1.1 200 OK') ]]; then echo "true"; fi
 }
 
 tmpdir=${tmpdir:-/tmp}
@@ -38,26 +38,31 @@ github_api_per_page=$( jq -r '.source.per_page // "20"' < ${payload})
 release_name=$( jq -r '.source.tag_prefix // ""' < ${payload})
 release_version_family=$( jq -r '.source.version_family // ""' < ${payload})
 release_version=$( jq -r '.version.version // "latest"' < ${payload})
-file_override=$( jq -r '.source.file_override // ""' < ${payload})
+get_assets=$( jq -r '.source.get_assets // ""' < ${payload})
 version="$(jq -r '.version // ""' < "${payload}")"
 
 release_file=$release_name$release_version
 file_url=https://github.com/${github_owner}/${github_repo}/archive/${release_file}.tar.gz
-if [ ! -z $file_override ]
-then
-  file_url=https://github.com/${github_owner}/${github_repo}/releases/download/${release_name}${release_version}/${file_override}
-fi
+
+github_api_releases=$(curl --max-time 900 --connect-timeout 300 -s https://api.github.com/repos/${github_owner}/${github_repo}/releases/tags/${release_name}${release_version}?${api_token_header}per_page=${github_api_per_page})
+release_assets=$(echo $github_api_releases | jq -r '.assets')
+
 #echo $file_url
 if [ $(validate_url $file_url) ]
 then
   echo "valid"
   mkdir -p "${destination}"
-  if [ ! -z $file_override ]
+  if [ ! -z "$get_assets" ]
   then
-    wget -O "${destination}/${file_override}" "${file_url}"
-  else
-    wget -O "${destination}/source.tar.gz" "${file_url}"
+    for row in $(echo "${release_assets}" | jq -r '.[] | @base64')
+    do
+      _jq() {
+       echo ${row} | base64 --decode | jq -r ${1}
+      }
+      wget -O "${destination}/$(_jq '.name')" "$(_jq '.browser_download_url')"
+    done
   fi
+  wget -O "${destination}/source.tar.gz" "${file_url}"
   echo "${release_version}" > "${destination}/version"
   echo "${file_url}" > "${destination}/url"
 fi
