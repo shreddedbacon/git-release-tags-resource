@@ -14,7 +14,7 @@ exec 1>&2 # redirect all output to stderr for logging
 #
 
 validate_url() {
-  if [[ $(wget -S --spider $1  2>&1 | grep 'HTTP/1.1 200 OK') ]]; then echo "true"; fi
+  if [[ $(wget -S --spider $1  2>&1 | egrep 'HTTP/1.1 200 OK|HTTP/1.1 302') ]]; then echo "true"; fi
 }
 
 tmpdir=${tmpdir:-/tmp}
@@ -38,14 +38,26 @@ github_api_per_page=$( jq -r '.source.per_page // "20"' < ${payload})
 release_name=$( jq -r '.source.tag_prefix // ""' < ${payload})
 release_version_family=$( jq -r '.source.version_family // ""' < ${payload})
 release_version=$( jq -r '.version.version // "latest"' < ${payload})
+file_override=$( jq -r '.source.file_override // ""' < ${payload})
 version="$(jq -r '.version // ""' < "${payload}")"
 
 release_file=$release_name$release_version
 file_url=https://github.com/${github_owner}/${github_repo}/archive/${release_file}.tar.gz
+if [ ! -z $file_override ]
+then
+  file_url=https://github.com/${github_owner}/${github_repo}/releases/download/${release_name}${release_version}/${file_override}
+fi
+#echo $file_url
 if [ $(validate_url $file_url) ]
 then
+  echo "valid"
   mkdir -p "${destination}"
-  wget -O "${destination}/source.tar.gz" "${file_url}"
+  if [ ! -z $file_override ]
+  then
+    wget -O "${destination}/${file_override}" "${file_url}"
+  else
+    wget -O "${destination}/source.tar.gz" "${file_url}"
+  fi
   echo "${release_version}" > "${destination}/version"
   echo "${file_url}" > "${destination}/url"
 fi
