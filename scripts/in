@@ -38,16 +38,42 @@ github_api_per_page=$( jq -r '.source.per_page // "20"' < ${payload})
 release_name=$( jq -r '.source.tag_prefix // ""' < ${payload})
 release_version_family=$( jq -r '.source.version_family // ""' < ${payload})
 release_version=$( jq -r '.version.version // "latest"' < ${payload})
+get_assets=$( jq -r '.source.get_assets // ""' < ${payload})
+get_source_tar=$( jq -r '.source.get_source_tar // "True"' < ${payload})
 version="$(jq -r '.version // ""' < "${payload}")"
 
 release_file=$release_name$release_version
 file_url=https://github.com/${github_owner}/${github_repo}/archive/${release_file}.tar.gz
+
+github_api_releases=$(curl --max-time 900 --connect-timeout 300 -s https://api.github.com/repos/${github_owner}/${github_repo}/releases/tags/${release_name}${release_version}?${api_token_header}per_page=${github_api_per_page})
+release_assets=$(echo $github_api_releases | jq -r '.assets')
+
+#echo $file_url
 if [ $(validate_url $file_url) ]
 then
+  echo "valid"
   mkdir -p "${destination}"
-  wget -O "${destination}/source.tar.gz" "${file_url}"
+  # if we want assets, lets download them
+  if [ ! -z "$get_assets" ]
+  then
+    for row in $(echo "${release_assets}" | jq -r '.[] | @base64')
+    do
+      _jq() {
+       echo ${row} | base64 --decode | jq -r ${1}
+      }
+      if [ "$get_assets" ]
+      then
+        wget -O "${destination}/$(_jq '.name')" "$(_jq '.browser_download_url')"
+        echo "$(_jq '.browser_download_url')" > ${destination}/$(_jq '.name')_asset_url
+      fi
+    done
+  fi
+  if [ "$get_source_tar" == "True" ]
+  then
+    wget -O "${destination}/source.tar.gz" "${file_url}"
+    echo "${file_url}" > "${destination}/url"
+  fi
   echo "${release_version}" > "${destination}/version"
-  echo "${file_url}" > "${destination}/url"
 fi
 
 jq -n "{

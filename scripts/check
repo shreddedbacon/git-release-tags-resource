@@ -46,10 +46,17 @@ release_ignore=$( jq -r '.source.tag_ignore // ""' < ${payload})
 release_name=$( jq -r '.source.tag_prefix // ""' < ${payload})
 release_version_family=$( jq -r '.source.version_family // ""' < ${payload})
 release_version=$( jq -r '.version.version // "latest"' < ${payload})
+get_assets=$( jq -r '.source.get_assets // ""' < ${payload})
 
 # Define semver regex formats
 # we only want final releases, no dev/pre-release unless there is an easy way to compare 1.1.1RC1 to 1.1.1ALPHA2 and 1.1.1BETA3 and which one comes first
-semver_regex_escaped='[\\.]?([0-9]+\\.)?([0-9]+\\.)?([0-9]+)?$'
+if [ ! -z "$release_version_family" ]
+then
+  semver_regex_escaped='[\\.]?([0-9]+\\.)?([0-9]+\\.)?([0-9]+)?$'
+else
+  semver_regex_escaped='([0-9]+\\.)([0-9]+\\.)([0-9]+)$'
+fi
+
 
 release_ignore_test=""
 # Prepare the matching terms for jq
@@ -87,6 +94,29 @@ for ((i=0; i <= $((${#versions_sorted[@]} - 2)); ++i)); do
     fi
   done
 done
+
+
+# Lets separate out any releases that have no assets, we only want ones with assets
+if [ ! -z "$get_assets" ]
+then
+  versions_sorted2=()
+  for ((i=0; i < $((${#versions_sorted[@]})); ++i))
+  do
+    github_api_releases2=$(curl --max-time 900 --connect-timeout 300 -s https://api.github.com/repos/${github_owner}/${github_repo}/releases/tags/${release_name}${versions_sorted[i]}?${api_token_header}per_page=${github_api_per_page})
+    release_assets=$(echo $github_api_releases2 | jq -r '.assets' | jq -r '.[].name')
+    if [ "$release_assets" ]
+    then
+      versions_sorted2+=(${versions_sorted[i]})
+    fi
+  done
+  if [ ${#versions_sorted2[@]} -ne 0 ]
+  then
+    versions_sorted=("${versions_sorted2[@]}")
+  else
+    echo "No releases with assets found"
+    exit 1
+  fi
+fi
 
 # Create the empty json string
 versions_json=''
