@@ -63,14 +63,14 @@ then
       }
       if [ "$get_assets" ]
       then
-        wget -O "${destination}/$(_jq '.name')" "$(_jq '.browser_download_url')"
+        wget -N -O "${destination}/$(_jq '.name')" "$(_jq '.browser_download_url')"
         echo "$(_jq '.browser_download_url')" > ${destination}/$(_jq '.name')_asset_url
       fi
     done
   fi
   if [ "$get_source_tar" == "True" ]
   then
-    wget -O "${destination}/source.tar.gz" "${file_url}"
+    wget -N -O "${destination}/source.tar.gz" "${file_url}"
     echo "${file_url}" > "${destination}/url"
   fi
   echo "${release_version}" > "${destination}/version"
