@@ -42,6 +42,7 @@ if [ -z "$api_token" ]; then api_token_header=""; else api_token_header="access_
 github_repo=$( jq -r '.source.repo // ""' < ${payload})
 github_owner=$( jq -r '.source.owner // ""' < ${payload})
 github_api_per_page=$( jq -r '.source.per_page // "20"' < ${payload})
+github_api_page_max=$( jq -r '.source.page_max // "10"' < ${payload})
 release_ignore=$( jq -r '.source.tag_ignore // ""' < ${payload})
 release_name=$( jq -r '.source.tag_prefix // ""' < ${payload})
 release_version_family=$( jq -r '.source.version_family // ""' < ${payload})
@@ -70,6 +71,20 @@ release_test=${release_ignore_test}${release_name}${release_version_family}${sem
 #github_api_releases=$(curl -s https://api.github.com/repos/${github_owner}/${github_repo}/tags?${api_token_header}per_page=${github_api_per_page} | jq --raw-output '.[].name | select( test("'${release_test}'"))')
 github_api_releases=$(curl --max-time 900 --connect-timeout 300 -s https://api.github.com/repos/${github_owner}/${github_repo}/tags?${api_token_header}per_page=${github_api_per_page})
 github_api_releases=$(echo $github_api_releases | jq -r '.[].name | select( test("'${release_test}'"))')
+#echo $github_api_releases
+if [ -z "$github_api_releases" ]
+then
+  for ((i=1;i<github_api_page_max;i++))
+  do
+  github_api_releases=$(curl --max-time 900 --connect-timeout 300 -s https://api.github.com/repos/${github_owner}/${github_repo}/tags?${api_token_header}page=$i)
+  github_api_releases=$(echo $github_api_releases | jq -r '.[].name | select( test("'${release_test}'"))')
+  if [ ! -z "$github_api_releases" ]
+  then
+    break
+  fi
+  done
+fi
+#echo $github_api_releases
 # Create a file to dump the results
 new_versions_file="${payload}-new-versions"
 touch "${new_versions_file}"
@@ -116,6 +131,12 @@ then
     echo "No releases with assets found"
     exit 1
   fi
+fi
+
+if [ ${#versions_sorted[@]} -eq 0 ]
+then
+  echo "No matching versions"
+  exit 1
 fi
 
 # Create the empty json string

@@ -35,6 +35,7 @@ resources:
 * `version_family` you can use this to drill down the versions you want to watch, ie if you only want nginx version `1.12` and its patch releases, you can use `version_family: 1.12`
 * `get_assets` set to True to only get tags that have release assets associated to them
 * `get_source_tar` to False to not download the source tarball
+* `page_max` will cycle through pages using github api up until this page max value is reached if no versions are found on the first page results
 
 ## Behavior
 
