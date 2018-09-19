@@ -46,6 +46,7 @@ github_api_page_max=$( jq -r '.source.page_max // "10"' < ${payload})
 release_ignore=$( jq -r '.source.tag_ignore // ""' < ${payload})
 release_name=$( jq -r '.source.tag_prefix // ""' < ${payload})
 release_version_family=$( jq -r '.source.version_family // ""' < ${payload})
+release_suffix=$( jq -r '.source.tag_suffix // ""' < ${payload})
 release_version=$( jq -r '.version.version // "latest"' < ${payload})
 get_assets=$( jq -r '.source.get_assets // ""' < ${payload})
 
@@ -53,9 +54,9 @@ get_assets=$( jq -r '.source.get_assets // ""' < ${payload})
 # we only want final releases, no dev/pre-release unless there is an easy way to compare 1.1.1RC1 to 1.1.1ALPHA2 and 1.1.1BETA3 and which one comes first
 if [ ! -z "$release_version_family" ]
 then
-  semver_regex_escaped='[\\.]?([0-9]+\\.)?([0-9]+\\.)?([0-9]+)?$'
+  semver_regex_escaped='[[\\._]]?([0-9]+[_\\.])?([0-9]+[_\\.])?([0-9]+)'${release_suffix}
 else
-  semver_regex_escaped='([0-9]+\\.)([0-9]+\\.)([0-9]+)$'
+  semver_regex_escaped='([0-9]+[_\\.])([0-9]+[_\\.])([0-9]+)'${release_suffix}
 fi
 
 
